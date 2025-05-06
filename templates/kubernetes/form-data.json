@@ -12,7 +12,7 @@
           "/kubernetes/documentation"
         ],
         "isModal": true,
-        "modalId": "contact-modal",
+        "modalId": "kubernetes-modal",
         "formData": {
           "title": "Talk to our Kubernetes experts",
           "formId": "3897",
@@ -45,6 +45,11 @@
                 "isRequired": true
               },
               {
+                "type": "country",
+                "label": "Country",
+                "isRequired": false
+              },
+              {
                 "type": "text",
                 "id": "company",
                 "label": "Company",
@@ -54,7 +59,7 @@
                 "type": "text",
                 "id": "title",
                 "label": "Job title",
-                "isRequired": false
+                "isRequired": true
               }
             ]
           }

@@ -37,14 +37,10 @@ appliance:
       path: /appliance
     - title: About
       path: /appliance/about
-    - title: Portfolio
-      path: /appliance/portfolio
     - title: Community
       path: /appliance/community
     - title: Hardware
       path: /appliance/hardware
-    - title: Virtual machines
-      path: /appliance/vm
 aws:
   title: AWS
   path: /aws
@@ -192,6 +188,8 @@ containers:
       path: /containers/chiseled
     - title: Chiseled and .NET
       path: /containers/chiseled/dotnet
+    - title: Container Build Service
+      path: /containers/container-build-service
 
 ai:
   title: AI / ML
@@ -260,12 +258,12 @@ desktop:
   children:
     - title: Overview
       path: /desktop
-    - title: Organisations
-      path: /desktop/organisations
+    - title: Organizations
+      path: /desktop/organizations
     - title: Developers
       path: /desktop/developers
-    - title: Flavours
-      path: /desktop/flavours
+    - title: Flavors
+      path: /desktop/flavors
     - title: WSL
       path: /desktop/wsl
 
@@ -283,7 +281,7 @@ core:
     - title: Services
       path: /core/services
     - title: Docs
-      path: /core/docs
+      path: https://documentation.ubuntu.com/core/
 
 iot:
   title: IoT
@@ -328,6 +326,8 @@ pro:
       path: /pro/users
     - title: Pricing
       path: /pricing/pro
+    - title: Free trial
+      path: /pro/free-trial
     - title: Docs
       path: https://documentation.ubuntu.com/pro
     - title: Discourse
@@ -414,14 +414,16 @@ security:
       path: /security/esm
     - title: Livepatch
       path: /security/livepatch
-    - title: Certifications & Hardening
-      path: /security/compliance-automation
+    - title: Security standards
+      path: /security/security-standards
     - title: CVEs
       path: /security/cves
     - title: Notices
       path: /security/notices
     - title: Docker Images
       path: /security/docker-images
+    - title: Assurances
+      path: /security/assurances
 
 community:
   title: Community
@@ -515,7 +517,7 @@ robotics:
     - title: Community
       path: /robotics/community
     - title: Docs
-      path: /robotics/docs
+      path: https://canonical-robotics.readthedocs-hosted.com/en/latest/
 
 credentials:
   title: Credentials
@@ -577,6 +579,20 @@ ubuntu1804:
       path: /18-04/ibm
     - title: OCI
       path: /18-04/oci
+
+ubuntu2004:
+  title: 20.04
+  path: /20-04
+
+  children:
+    - title: Overview
+      path: /20-04
+    - title: Azure
+      path: /20-04/azure
+    - title: AWS
+      path: /20-04/aws
+    - title: Google Cloud
+      path: /20-04/gcp
 
 telco:
   title: Telco
@@ -665,4 +681,3 @@ confidential-ai:
       path: /confidential-computing
     - title: AI
       path: /confidential-computing/ai
-

@@ -32,15 +32,16 @@
         </p>
         <div class="p-cta-block">
           <a href="/kubernetes/contact-us"
-             class="p-button--positive js-invoke-modal">Get in touch</a>
+             class="p-button--positive js-invoke-modal"
+             aria-controls="kubernetes-modal">Get in touch</a>
         </div>
       </div>
     </div>
   </section>
 
   <div class="p-section--deep u-fixed-width">
-    <nav class="p-tabs js-tab-container">
-      <ul class="p-tabs__list js-tabbed-content"
+    <nav class="p-tabs js-tabbed-content">
+      <ul class="p-tabs__list"
           role="tablist"
           aria-label="Kubernetes resources"
           data-maintain-hash="true">
@@ -817,6 +818,8 @@
     </div>
   </div>
 
-  {% include "/shared/forms/form-template.html" %}
+  {{ load_form("/kubernetes") | safe }}
+
+  <script src="{{ versioned_static('js/dist/tabbedContent.js') }}"></script>
 
 {% endblock %}

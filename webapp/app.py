@@ -22,6 +22,8 @@ from canonicalwebteam.discourse import (
     Category,
 )
 from canonicalwebteam.flask_base.app import FlaskBase
+from pathlib import Path
+import canonicalwebteam.directory_parser as directory_parser
 from canonicalwebteam.search import build_search_view
 from canonicalwebteam.templatefinder import TemplateFinder
 from canonicalwebteam.form_generator import FormGenerator
@@ -146,7 +148,6 @@ from webapp.views import (
     BlogSitemapPage,
     account_query,
     appliance_install,
-    appliance_portfolio,
     build_vulnerabilities,
     build_vulnerabilities_list,
     process_active_vulnerabilities,
@@ -174,6 +175,7 @@ from webapp.views import (
     subscription_centre,
     thank_you,
     unlisted_engage_page,
+    build_sitemap_tree,
 )
 
 DISCOURSE_API_KEY = os.getenv("DISCOURSE_API_KEY")
@@ -181,6 +183,19 @@ DISCOURSE_API_USERNAME = os.getenv("DISCOURSE_API_USERNAME")
 
 CHARMHUB_DISCOURSE_API_KEY = os.getenv("CHARMHUB_DISCOURSE_API_KEY")
 CHARMHUB_DISCOURSE_API_USERNAME = os.getenv("CHARMHUB_DISCOURSE_API_USERNAME")
+
+# Sitemaps that are already generated and don't need to be updated.
+# Can be seen on sitemap_index.xml
+DYNAMIC_SITEMAPS = [
+    "tutorials",
+    "engage",
+    "ceph/docs",
+    "blog",
+    "security/notices",
+    "security/cves",
+    "security/livepatch/docs",
+    "robotics/docs",
+]
 
 # Set up application
 # ===
@@ -195,10 +210,14 @@ app = FlaskBase(
 )
 
 # ChoiceLoader attempts loading templates from each path in successive order
+directory_parser_templates = (
+    Path(directory_parser.__file__).parent / "templates"
+)
 loader = ChoiceLoader(
     [
         FileSystemLoader("templates"),
         FileSystemLoader("node_modules/vanilla-framework/templates"),
+        FileSystemLoader(str(directory_parser_templates)),
     ]
 )
 
@@ -231,7 +250,8 @@ search_engine_id = "adb2397a224a1fe55"
 init_handlers(app, sentry)
 
 # Prepare forms
-form_loader = FormGenerator(app)
+form_template_path = "shared/forms/form-template.html"
+form_loader = FormGenerator(app, form_template_path)
 form_loader.load_forms()
 
 # Routes
@@ -475,10 +495,6 @@ app.add_url_rule(
         "<regex('(raspberry-pi2?|intel-nuc|vm)'):device>"
     ),
     view_func=appliance_install,
-)
-app.add_url_rule(
-    "/appliance/portfolio",
-    view_func=appliance_portfolio,
 )
 
 # blog section
@@ -855,118 +871,6 @@ app.add_url_rule(
     ),
 )
 
-# Core docs
-core_docs = Docs(
-    parser=DocParser(
-        api=discourse_api, index_topic_id=19764, url_prefix="/core/docs"
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs",
-    blueprint_name="core",
-)
-# Core docs search
-app.add_url_rule(
-    "/core/docs/search",
-    "core-docs-search",
-    build_search_view(
-        app,
-        session=session,
-        site="ubuntu.com/core/docs",
-        template_path="/core/docs/search-results.html",
-        search_engine_id=search_engine_id,
-    ),
-)
-core_docs.init_app(app)
-
-# Core docs - Modem Manager
-core_modem_manager_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19901,
-        url_prefix="/core/docs/modem-manager",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/modem-manager",
-    blueprint_name="modem-manager",
-)
-core_modem_manager_docs.init_app(app)
-
-# Core docs - Bluetooth (bluez) docs
-core_bluetooth_docs = Docs(
-    parser=DocParser(
-        api=discourse_api, index_topic_id=19971, url_prefix="/core/docs/bluez"
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/bluez",
-    blueprint_name="bluez",
-)
-core_bluetooth_docs.init_app(app)
-
-# Core docs - NetworkManager
-core_network_manager_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19917,
-        url_prefix="/core/docs/networkmanager",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/networkmanager",
-    blueprint_name="networkmanager",
-)
-core_network_manager_docs.init_app(app)
-
-# Core docs - wp-supplicant
-core_wpa_supplicant_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19943,
-        url_prefix="/core/docs/wpa-supplicant",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/wpa-supplicant",
-    blueprint_name="wpa-supplicant",
-)
-core_wpa_supplicant_docs.init_app(app)
-
-# Core docs - easy-openvpn
-core_easy_openvpn_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19950,
-        url_prefix="/core/docs/easy-openvpn",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/easy-openvpn",
-    blueprint_name="easy-openvpn",
-)
-core_easy_openvpn_docs.init_app(app)
-
-# Core docs - wifi-ap
-core_wifi_ap_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19959,
-        url_prefix="/core/docs/wifi-ap",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/wifi-ap",
-    blueprint_name="wifi-ap",
-)
-core_wifi_ap_docs.init_app(app)
-
-# Core docs - alsa-utils
-core_als_autils_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=19995,
-        url_prefix="/core/docs/alsa-utils",
-    ),
-    document_template="/core/docs/document.html",
-    url_prefix="/core/docs/alsa-utils",
-    blueprint_name="alsa-utils",
-)
-core_als_autils_docs.init_app(app)
-
 # Credentials
 app.add_url_rule("/credentials", view_func=cred_home)
 app.add_url_rule("/credentials/self-study", view_func=cred_self_study)
@@ -1234,33 +1138,6 @@ app.add_url_rule(
 
 landscape_docs.init_app(app)
 
-# Robotics docs
-robotics_docs = Docs(
-    parser=DocParser(
-        api=discourse_api,
-        index_topic_id=34683,
-        url_prefix="/robotics/docs",
-    ),
-    document_template="/robotics/docs/document.html",
-    url_prefix="/robotics/docs",
-    blueprint_name="robotics-docs",
-)
-
-# Robotics search
-app.add_url_rule(
-    "/robotics/docs/search",
-    "robotics-docs-search",
-    build_search_view(
-        app,
-        session=session,
-        site="ubuntu.com/robotics/docs",
-        template_path="/robotics/docs/search-results.html",
-        search_engine_id=search_engine_id,
-    ),
-)
-
-robotics_docs.init_app(app)
-
 certified_routes(app)
 
 # Override openstack/install
@@ -1321,6 +1198,44 @@ def render_public_cloud_blogs():
 app.add_url_rule("/cloud/public-cloud", view_func=render_public_cloud_blogs)
 
 
+# Security standards resources blogs tab
+def render_security_standards_blogs():
+    blogs = BlogViews(
+        api=BlogAPI(
+            session=session, thumbnail_width=640, thumbnail_height=340
+        ),
+        tag_ids=[
+            3829,
+            2562,
+            4063,
+            3903,
+            4468,
+            4464,
+            4392,
+            1228,
+            4417,
+            4391,
+            3830,
+            4632,
+            4633,
+            4749,
+        ],
+        per_page=4,
+        blog_title="Security standards blogs",
+    )
+    sorted_articles = sorted(
+        blogs.get_index()["articles"], key=lambda x: x["date"]
+    )
+    return flask.render_template(
+        "/security/security-standards.html", blogs=sorted_articles
+    )
+
+
+app.add_url_rule(
+    "/security/security-standards", view_func=render_security_standards_blogs
+)
+
+
 # Supermicro blog section
 def render_supermicro_blogs():
     blogs = BlogViews(
@@ -1339,3 +1254,22 @@ def render_supermicro_blogs():
 
 
 app.add_url_rule("/supermicro", view_func=render_supermicro_blogs)
+
+
+# Endpoint for retrieving parsed directory tree
+def get_sitemaps_tree():
+    try:
+        tree = directory_parser.scan_directory(
+            os.getcwd() + "/templates", exclude_paths=DYNAMIC_SITEMAPS
+        )
+    except Exception as e:
+        return {"Error:": str(e)}, 500
+    return tree
+
+
+app.add_url_rule("/sitemap_parser", view_func=get_sitemaps_tree)
+app.add_url_rule(
+    "/sitemap_tree.xml",
+    view_func=build_sitemap_tree(DYNAMIC_SITEMAPS),
+    methods=["GET", "POST"],
+)

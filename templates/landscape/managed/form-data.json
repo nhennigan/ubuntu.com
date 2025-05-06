@@ -4,7 +4,7 @@
       "templatePath": "/landscape/managed/index.html",
       "childrenPaths": [],
       "isModal": true,
-      "modalId": "contact-modal",
+      "modalId": "landscape-managed-modal",
       "formData": {
         "title": "Talk to our Landscape team",
         "introText": "Discuss your needs with an advisor",
@@ -20,24 +20,6 @@
           "noCommentsFromLead": true,
           "fields": [
             {
-              "type": "text",
-              "id": "firstName",
-              "label": "First name",
-              "isRequired": true
-            },
-            {
-              "type": "text",
-              "id": "lastName",
-              "label": "Last name",
-              "isRequired": true
-            },
-            {
-              "type": "email",
-              "id": "email",
-              "label": "Work email",
-              "isRequired": true
-            },
-            {
               "type": "tel",
               "id": "phone",
               "label": "Mobile/cell phone number"
@@ -51,7 +33,7 @@
             {
               "type": "long-text",
               "id": "contentSummary",
-              "label": "Abour your project"
+              "label": "About your project"
             }
           ]
         },

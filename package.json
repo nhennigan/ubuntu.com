@@ -9,7 +9,7 @@
     "lint-js": "eslint static/js/src/**/*.{js,jsx,ts,tsx}",
     "lint-ts": "tsc --noEmit",
     "test-js": "TZ=UTC NODE_ICU_DATA=node_modules/full-icu jest",
-    "test-links": "./entrypoint 0.0.0.0:${PORT} && sleep 2 && linkchecker --threads 2 --ignore-url /usn --ignore-url /resources --ignore-url /search --ignore-url /server/docs --no-warnings http://127.0.0.1:8000",
+    "test-links": "./entrypoint 0.0.0.0:${PORT} && sleep 2 && linkchecker --threads 2 --ignore-url /usn --ignore-url /search --ignore-url /server/docs --no-warnings http://127.0.0.1:8000",
     "build-cookie-policy": "cp node_modules/@canonical/cookie-policy/build/js/cookie-policy.js static/js/dist/",
     "build-flickity": "cp node_modules/flickity/dist/flickity.pkgd.min.js static/js/dist",
     "build-global-nav": "cp node_modules/@canonical/global-nav/dist/global-nav.js static/js/dist/",
@@ -25,7 +25,8 @@
     "serve": "./entrypoint 0.0.0.0:${PORT}",
     "start": "yarn run build && concurrently --kill-others --raw 'yarn run watch-css' 'yarn run watch-js' 'yarn run serve'",
     "check-prettier": "prettier -c 'static/js/src/**/*.{js,jsx,ts,tsx}' 'static/sass/**/*.scss'",
-    "format-prettier": "prettier -w 'static/js/src/**/*.{js,jsx,ts,tsx}' 'static/sass/**/*.scss'"
+    "format-prettier": "prettier -w 'static/js/src/**/*.{js,jsx,ts,tsx}' 'static/sass/**/*.scss'",
+    "percy-snapshot": "percy snapshot snapshots.js"
   },
   "keywords": [
     "website",
@@ -90,6 +91,7 @@
     "@canonical/global-nav": "3.6.4",
     "@canonical/latest-news": "1.5.0",
     "@canonical/react-components": "^0.59.1",
+    "@percy/cli": "^1.30.7",
     "@reduxjs/toolkit": "2.2.7",
     "@sentry/react": "^8.19.0",
     "@sentry/tracing": "^7.114.0",
@@ -121,7 +123,7 @@
     "url-polyfill": "1.1.12",
     "url-search-params-polyfill": "8.2.5",
     "use-query-params": "^2.2.1",
-    "vanilla-framework": "4.21.1",
+    "vanilla-framework": "4.23.0",
     "yup": "1.4.0"
   },
   "resolutions": {

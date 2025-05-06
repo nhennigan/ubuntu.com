@@ -252,11 +252,15 @@
       <h2>
         For more information, <a href="/kubernetes/documentation" aria-label="Check out the docs">read the docs</a>
         <br />
-        Or <a href="/kubernetes/contact-us" class="js-invoke-modal">contact us</a> to let our experts help you take the next step
+        Or <a href="/kubernetes/contact-us"
+    class="js-invoke-modal"
+    aria-controls="kubernetes-modal">contact us</a> to let our experts help you take the next step
       </h2>
     </div>
   </section>
 
-  {% include "/shared/forms/form-template.html" %}
+  {{ load_form("/kubernetes") | safe }}
+
+  <script src="{{ versioned_static('js/dist/tabbedContent.js') }}"></script>
 
 {% endblock content %}

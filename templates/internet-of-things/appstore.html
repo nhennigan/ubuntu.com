@@ -19,6 +19,10 @@
 
 {% block content %}
 
+  <section class="p-strip is-shallow u-no-padding--bottom">
+    {% include "shared/_20-04-eol-banner.html" %}
+  </section>
+
   {% call(slot) vf_hero(
     title_text="IoT App Store",
     layout="50/50",
@@ -29,7 +33,8 @@
     {%- endif -%}
     {%- if slot == "cta" -%}
       <a href="/internet-of-things/contact-us?product=appstore"
-         class="p-button--positive js-invoke-modal">Contact us</a>
+         class="p-button--positive js-invoke-modal"
+         aria-controls="iot-modal">Contact us</a>
       <a href="https://assets.ubuntu.com/v1/d6d1d3fc-IoT+App+Store+Datasheet+v3.pdf"
          class="p-button">Read the datasheet</a>
     {%- endif -%}
@@ -142,7 +147,8 @@
         <div class="p-cta-block">
           <p style="margin-right: 1rem">Ready to find out more?</p>
           <a href="/internet-of-things/contact-us?product=appstore"
-             class="p-button--positive js-invoke-modal">Get in touch</a>
+             class="p-button--positive js-invoke-modal"
+             aria-controls="iot-modal">Get in touch</a>
         </div>
       </div>
     </div>
@@ -467,6 +473,7 @@
         <div class="p-cta-block">
           <a class="p-button--positive js-invoke-modal"
              href="/internet-of-things#get-in-touch"
+             aria-controls="iot-modal"
              onclick="dataLayer.push({'event' : 'GAEvent', 'eventCategory' : 'Internal Link', 'eventAction' : 'Contact us' });">Contact our team</a>
         </div>
       </div>
@@ -489,8 +496,6 @@
     {% include "internet-of-things/shared/_latest-news-iot.html" %}
   {% endwith %}
 
-  {% with formId=2639 %}
-    {% include "/shared/forms/form-template.html" %}
-  {% endwith %}
+  {{ load_form('/internet-of-things', 2639) | safe }}
 
 {% endblock content %}

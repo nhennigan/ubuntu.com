@@ -255,9 +255,9 @@ products:
             - title: Ubuntu Pro for GCP
               description: Google Cloud support
               url: /gcp/pro
-            - title: Certifications and hardening
+            - title: Security standards
               description: CIS, DISA-STIG, FIPS compliance
-              url: /security/compliance-automation
+              url: /security/security-standards
             - title: Confidential computing
               description: Protect your data in use
               url: /confidential-computing
@@ -268,7 +268,7 @@ products:
             - title: Ubuntu Pro pricing
               url: /pricing/pro
             - title: Open infrastructure consulting
-              url: /pricing/consulting
+              url: https://canonical.com/consulting
             - title: Certified hardware
               url: /certified
             - title: CVE reports
@@ -487,7 +487,7 @@ use_case:
           url: /ai
         - title: Compliance
           description: Certifications and hardening
-          url: /security/compliance-automation
+          url: /security/security-standards
         - title: Confidential computing
           description: Protect your data in use
           url: /confidential-computing
@@ -586,7 +586,7 @@ support:
             - title: Pricing
               url: /pricing/pro
             - title: Open infrastructure consulting
-              url: /pricing/consulting
+              url: https://canonical.com/consulting
 
     - title: Resources
       primary_links:
@@ -823,10 +823,8 @@ download_ubuntu:
           links:
             - title: Upgrade Ubuntu Desktop
               url: /tutorials/upgrading-ubuntu-desktop
-            - title: 24.04 desktop guide
-              url: https://help.ubuntu.com/lts/ubuntu-help/index.html
-            - title: 22.04 desktop guide
-              url: https://help.ubuntu.com/22.04/ubuntu-help/index.html
+            - title: Ubuntu Desktop guide
+              url: https://help.ubuntu.com
             - title: Installation tutorial
               url: /tutorials/install-ubuntu-desktop
             - title: Try before installing
@@ -923,6 +921,8 @@ download_ubuntu:
       secondary_links:
         - title: Quick links
           links:
+            - title: Install Ubuntu on Renesas IoT Platforms
+              url: /download/renesas-iot
             - title: Install Ubuntu on Qualcomm IoT Platforms
               url: /download/qualcomm-iot
             - title: AMD Evaluation kits & SOMs

@@ -11,7 +11,7 @@
         "/internet-of-things/smart-displays"
       ],
       "isModal": true,
-      "modalId": "contact-modal",
+      "modalId": "iot-modal",
       "formData": {
         "title": "Let's get your project to market faster!",
         "introText": "Canonical partners with silicon companies, board manufacturers and ODMs to help the industry bring smart device and software capabilities to market faster. Tell us about your project so we can bring the right Canonical team members to the conversation to help you.",
@@ -87,18 +87,6 @@
           "fields": [
             {
               "type": "text",
-              "id": "firstName",
-              "label": "First name",
-              "isRequired": true
-            },
-            {
-              "type": "text",
-              "id": "lastName",
-              "label": "Last name",
-              "isRequired": true
-            },
-            {
-              "type": "text",
               "id": "company",
               "label": "Company",
               "isRequired": true
@@ -107,12 +95,6 @@
               "type": "text",
               "id": "title",
               "label": "Job title",
-              "isRequired": true
-            },
-            {
-              "type": "email",
-              "id": "email",
-              "label": "Email address",
               "isRequired": true
             },
             {

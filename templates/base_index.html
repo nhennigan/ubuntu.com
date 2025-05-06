@@ -49,7 +49,7 @@
                     width="2382",
                     height="1684",
                     hi_def=True,
-                    loading="lazy",
+                    loading="auto",
                     attrs={"id": "test-takeover-image"}) | safe
           }}
         </div>
@@ -76,14 +76,17 @@
           </div>
         </div>
         <div class="col-6 u-vertically-center u-align--center u-hide--medium u-hide--small">
-          {{ image(url="https://assets.ubuntu.com/v1/33b5133c-Noble-Numbat-optimised.svg",
-                    alt="",
-                    width="197",
-                    height="150",
-                    hi_def=True,
-                    loading="lazy",
-                    attrs={"id": "takeover-image"}) | safe
-          }}
+          <picture>
+            <source srcset="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" media="(max-width: 1036px)"> 
+            {{ image(url="https://assets.ubuntu.com/v1/33b5133c-Noble-Numbat-optimised.svg",
+                      alt="",
+                      width="197",
+                      height="150",
+                      hi_def=True,
+                      loading="auto",
+                      attrs={"id": "takeover-image"}) | safe
+            }}
+          </picture>
         </div>
       </div>
     </section>
@@ -208,7 +211,7 @@
                         width="600",
                         height="900",
                         hi_def=True,
-                        loading="auto") | safe
+                        loading="lazy") | safe
             }}
           </div>
         </div>
@@ -224,7 +227,7 @@
             <p class="p-heading--2">
               <a href="/pro">Ubuntu Pro</a> is more than Linux.
               <br />
-              <a href="/security/compliance-automation">Security and compliance</a> for the full stack.
+              <a href="/security/security-standards">Security and compliance</a> for the full stack.
             </p>
           </div>
           <p>
@@ -298,7 +301,7 @@
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
           <p>
-            <a href="/security/compliance-automation#fips">FIPS 140-2</a> cryptographic modules certified by NIST
+            <a href="/security/security-standards#fips">FIPS 140-2</a> cryptographic modules certified by NIST
           </p>
         </li>
       </ul>
@@ -310,13 +313,13 @@
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
           <p>
-            <a href="/security/compliance-automation#stig">DISA/STIG</a> hardening for <abbr title="Department of Defence, USA">DoD</abbr>
+            <a href="/security/security-standards#stig">DISA/STIG</a> hardening for <abbr title="Department of Defence, USA">DoD</abbr>
             compliance
           </p>
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
           <p>
-            <a href="/security/compliance-automation#cis">CIS profiles</a> for cyber defence and malware prevention
+            <a href="/security/security-standards#cis">CIS profiles</a> for cyber defence and malware prevention
           </p>
         </li>
       </ul>
@@ -429,7 +432,7 @@
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
           <p>
-            <a href="/security/compliance-automation#fips">FIPS</a>, <a href="/security/compliance-automation#cis">CIS hardening</a> and CVE fixes with Ubuntu Pro
+            <a href="/security/security-standards#fips">FIPS</a>, <a href="/security/security-standards#cis">CIS hardening</a> and CVE fixes with Ubuntu Pro
           </p>
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
@@ -756,7 +759,7 @@
           <div class="p-section--shallow">
             <h2 class="p-heading--1 u-no-margin--bottom">Ultra secure things</h2>
             <p class="p-heading--2">
-              <a href="/appliance">Ubuntu Core Appliances</a> with transactional updates <a href="/embedded">for a better embedded Linux</a>.
+              <a href="/core">Ubuntu Core</a> with transactional updates for a better embedded Linux.
             </p>
             <div class="p-logo-section--dense">
               <div class="p-logo-section__items landing-logos u-no-padding">
@@ -1236,7 +1239,7 @@
         </li>
         <li class="p-list__item is-ticked col-medium-3 col-3 u-no-padding--top u-no-padding--bottom">
           <p>
-            <a href="/security/compliance-automation#cis">CIS certification</a>
+            <a href="/security/security-standards#cis">CIS certification</a>
           </p>
         </li>
       </ul>
@@ -1559,6 +1562,8 @@
         subtitle.textContent = selectedTakeover.subtitle;
 
         image.src = selectedTakeover.image;
+        image.srcset = selectedTakeover.image;
+
         image.onload = function() {
           // Remove animation delay
           if (takeoverAnimation) {

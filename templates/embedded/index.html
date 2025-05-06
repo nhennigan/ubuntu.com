@@ -23,8 +23,9 @@
 
 {% block content %}
 
-  <section class="p-strip">
+  <section class="p-section--hero">
     <div class="row--50-50">
+      {% include "shared/_20-04-eol-banner.html" %}
       <div class="col">
         <h1>Embedded Linux 2.0</h1>
       </div>
@@ -156,7 +157,8 @@
 
       {%- if slot == 'cta' -%}
         <a class="p-button--positive js-invoke-modal"
-           href="/internet-of-things/contact-us">Get in touch</a>
+           href="/internet-of-things/contact-us"
+           aria-controls="embedded-modal">Get in touch</a>
       {%- endif -%}
     {%- endcall -%}
   </section>
@@ -804,7 +806,9 @@
           <li class="p-list__item is-ticked">Supported by Canonical</li>
         </ul>
         <div class="p-cta-block">
-          <a class="p-button js-invoke-modal" href="/core/contact-us">Get in touch about certification</a>
+          <a class="p-button js-invoke-modal"
+             href="/core/contact-us"
+             aria-controls="embedded-modal">Get in touch about certification</a>
         </div>
       {%- endif -%}
 
@@ -1020,7 +1024,8 @@
 
       {%- if slot == 'cta' -%}
         <a href="/internet-of-things/contact-us"
-           class="p-button--positive js-invoke-modal">Contact us</a>
+           class="p-button--positive js-invoke-modal"
+           aria-controls="embedded-modal">Contact us</a>
       {%- endif -%}
     {%- endcall -%}
   </section>
@@ -1061,7 +1066,7 @@
 
   <script src="{{ versioned_static('js/dist/sticky-nav.js') }}"></script>
 
-  {% include "/shared/forms/form-template.html" %}
+  {{ load_form("/embedded") | safe }}
 
 {% endblock content %}
 

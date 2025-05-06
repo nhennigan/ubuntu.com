@@ -18,6 +18,7 @@
 
   <section class="p-section--hero">
     <div class="row--50-50">
+      {% include "shared/_20-04-eol-banner.html" %}
       <div class="col">
         <div class="p-section--shallow">
           <h1>
@@ -33,7 +34,8 @@
         </div>
         <div class="p-cta-block">
           <a href="/internet-of-things/contact-us"
-             class="p-button--positive js-invoke-modal">Contact us to learn more</a>
+             class="p-button--positive js-invoke-modal"
+             aria-controls="iot-modal">Contact us to learn more</a>
           <p>
             <a href="/engage/Embedding_IoT_GUI_with_Ubuntu_Frame">Develop GUIs for IoT with our guide&nbsp;&rsaquo;</a>
           </p>
@@ -199,7 +201,8 @@
 
       {%- if slot == 'cta' -%}
         <a href="/internet-of-things/contact-us"
-           class="p-button js-invoke-modal">Reach out to hear more</a>
+           class="p-button js-invoke-modal"
+           aria-controls="iot-modal">Reach out to hear more</a>
       {%- endif -%}
 
     {%- endcall -%}
@@ -505,7 +508,9 @@
       <div class="col-10">
         <h2>Learn how we can get your device to market for you</h2>
         <p class="p-heading--2">
-          <a href="/internet-of-things/contact-us" class="js-invoke-modal">Get in touch&nbsp;&rsaquo;</a>
+          <a href="/internet-of-things/contact-us"
+             class="js-invoke-modal"
+             aria-controls="iot-modal">Get in touch&nbsp;&rsaquo;</a>
         </p>
       </div>
     </div>
@@ -542,8 +547,6 @@
     {% include "internet-of-things/shared/_latest-news-iot.html" %}
   {% endwith %}
 
-  {% with formId=1422 %}
-    {% include "/shared/forms/form-template.html" %}
-  {% endwith %}
+  {{ load_form('/internet-of-things', 1422) | safe }}
 
 {% endblock %}

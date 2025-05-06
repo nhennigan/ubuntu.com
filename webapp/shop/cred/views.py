@@ -17,6 +17,10 @@ from webapp.shop.api.datastore import (
     handle_confidentiality_agreement_submission,
     has_filed_confidentiality_agreement,
 )
+from webapp.shop.cred.constants import (
+    TAEXAM_PROC_EXAM_MAPPING,
+    TAEXAM_PROC_STATE,
+)
 from webapp.shop.decorators import (
     credentials_group,
     credentials_admin,
@@ -47,6 +51,7 @@ EXAM_NAMES = {
     "cue-test": "CUE Linux Beta",
     "cue-linux-essentials": "CUE.01 Linux",
     "cue-01-linux": "CUE.01 Linux",
+    "cue-02-desktop": "CUE.02 Desktop",
 }
 
 RESERVATION_STATES = {
@@ -163,6 +168,10 @@ def cred_sign_up(**_):
     if client_ip and ":" not in client_ip:
         visitor_data["leadClientIpAddress"] = client_ip
 
+    is_staging = "staging" in os.getenv(
+        "CONTRACTS_API_URL", "https://contracts.staging.canonical.com/"
+    )
+    form_fields["enviornment"] = "staging" if is_staging else "production"
     payload = {
         "formId": form_fields.pop("formid"),
         "input": [
@@ -351,6 +360,86 @@ def cred_thank_you(**_):
     )
 
 
+def check_cred_exam_effectiveness(
+    contract, user_timezone, time_buffer, starts_at
+) -> str | None:
+    tz_info = pytz.timezone(user_timezone)
+    now = datetime.now(pytz.UTC)
+    effective_from = now.astimezone(tz_info) + timedelta(hours=time_buffer)
+    effective_to = (
+        datetime.strptime(
+            f"{contract['contractInfo']['effectiveTo']}",
+            "%Y-%m-%dT%H:%M:%SZ",
+        )
+        .replace(tzinfo=pytz.UTC)
+        .astimezone(tz_info)
+    )
+
+    if starts_at < effective_from or starts_at > effective_to:
+        error = [
+            "Scheduled time should be between",
+            f"{effective_from.strftime('%m-%d-%Y %H:%M')}",
+            "to",
+            f"{effective_to.strftime('%m-%d-%Y %H:%M')}",
+        ]
+        return error
+
+    return None
+
+
+def check_cred_maintenance(
+    is_cred_admin,
+    show_cred_maintenance_alert,
+    cred_maintenance_start,
+    cred_maintenance_end,
+    starts_at,
+    user_timezone,
+):
+    tz_info = pytz.timezone(user_timezone)
+    cred_maintenance_start = (
+        parse(cred_maintenance_start) if cred_maintenance_start else None
+    )
+    cred_maintenance_end = (
+        parse(cred_maintenance_end) if cred_maintenance_end else None
+    )
+    if (
+        not is_cred_admin
+        and show_cred_maintenance_alert
+        and cred_maintenance_start
+        and cred_maintenance_end
+        and (cred_maintenance_start <= starts_at <= cred_maintenance_end)
+    ):
+        maintenance_start_tz = cred_maintenance_start.astimezone(tz_info)
+        maintenance_end_tz = cred_maintenance_end.astimezone(tz_info)
+        return True, maintenance_start_tz, maintenance_end_tz
+
+    return False, None, None
+
+
+def check_cred_exam_start_time(
+    starts_at, user_timezone, time_buffer, time_delay
+):
+    tz_info = pytz.timezone(user_timezone)
+    if starts_at <= datetime.now(pytz.UTC).astimezone(tz_info) + timedelta(
+        hours=time_buffer
+    ):
+        error = (
+            f"Start time should be at least {time_delay}"
+            + " from now or later."
+        )
+        return error
+
+    return None
+
+
+def get_taexam_to_procexam_mapping(ta_exam: str) -> int | None:
+    return TAEXAM_PROC_EXAM_MAPPING.get(ta_exam)
+
+
+def is_proctoring_enabled(ta_exam: str) -> int | None:
+    return TAEXAM_PROC_STATE.get(ta_exam, False)
+
+
 @shop_decorator(area="cred", permission="user", response="html")
 def cred_schedule(
     ua_contracts_api,
@@ -360,8 +449,11 @@ def cred_schedule(
     cred_maintenance_end,
     is_cred_admin,
     trueability_api,
+    proctor_api,
     **_,
 ):
+    user = user_info(flask.session)
+    base_url = flask.request.url_root
     error = None
 
     contract_long_id = flask.request.args.get("contractLongID")
@@ -377,115 +469,172 @@ def cred_schedule(
     is_staging = "staging" in os.getenv(
         "CONTRACTS_API_URL", "https://contracts.staging.canonical.com/"
     )
-    time_delta = 0.5 if is_staging else 3
+    time_buffer = 0.5 if is_staging else 3
     time_delay = "30 minutes" if is_staging else "3 hours"
 
     if flask.request.method == "POST":
         data = flask.request.form
-
         timezone = data["timezone"]
         tz_info = pytz.timezone(timezone)
         scheduled_time = datetime.strptime(
             f"{data['date']}T{data['time']}", "%Y-%m-%dT%H:%M"
         )
+        cue_banned_error = "user is banned from using CUE"
+        formatted_cue_banned_error = (
+            "User is banned from Canonical credentialing exams."
+        )
         starts_at = tz_info.localize(scheduled_time)
-        contract_item_id = data["contract_item_id"]
+        contract_item_id = flask.request.args.get("contractItemID", "")
         first_name, last_name = get_user_first_last_name()
         country_code = TIMEZONE_COUNTRIES[timezone]
         assessment_reservation_uuid = None
+        is_rescheduling = False
         template_data = {
-            key: data[key]
-            for key in ["date", "time", "timezone", "contract_item_id"]
+            key: data[key] for key in ["date", "time", "timezone"]
         }
         template_data["min_date"] = min_date
         template_data["max_date"] = max_date
         template_data["time_delay"] = time_delay
+        template_data["contract_item_id"] = contract_item_id
+        template_data["ta_exam"] = "cue-01-linux"
+        error_start_time = check_cred_exam_start_time(
+            starts_at, timezone, time_buffer, time_delay
+        )
+        proc_exam = None
 
         if flask.request.args.get("uuid", default=None, type=str):
             assessment_reservation_uuid = flask.request.args.get("uuid")
+            is_rescheduling = True
 
-        if starts_at <= datetime.now(pytz.UTC).astimezone(tz_info) + timedelta(
-            hours=time_delta
-        ):
-            error = (
-                f"Start time should be at least {time_delay}"
-                + " from now or later."
-            )
+        if data["ta_exam"] == "":
             return flask.render_template(
                 "/credentials/schedule.html",
                 **template_data,
-                error=error,
+                error="Invalid exam type.",
+                exam_type="cue-01-linux",
             )
 
-        cred_maintenance_start = (
-            parse(cred_maintenance_start) if cred_maintenance_start else None
+        proc_exam = get_taexam_to_procexam_mapping(data["ta_exam"])
+        if proc_exam is None:
+            return flask.render_template(
+                "/credentials/schedule.html",
+                **template_data,
+                error="Invalid exam type.",
+                exam_type="cue-01-linux",
+            )
+        template_data["ta_exam"] = data["ta_exam"]
+        ta_exam_name = EXAM_NAMES[data["ta_exam"]]
+
+        if error_start_time is not None:
+            return flask.render_template(
+                "/credentials/schedule.html",
+                **template_data,
+                error=error_start_time,
+            )
+
+        maintenance, maintenance_start, maintenance_end = (
+            check_cred_maintenance(
+                is_cred_admin,
+                show_cred_maintenance_alert,
+                cred_maintenance_start,
+                cred_maintenance_end,
+                starts_at,
+                timezone,
+            )
         )
-        cred_maintenance_end = (
-            parse(cred_maintenance_end) if cred_maintenance_end else None
-        )
-        if (
-            not is_cred_admin
-            and show_cred_maintenance_alert
-            and cred_maintenance_start
-            and cred_maintenance_end
-            and (cred_maintenance_start <= starts_at <= cred_maintenance_end)
-        ):
-            maintenance_start_tz = cred_maintenance_start.astimezone(tz_info)
-            maintenance_end_tz = cred_maintenance_end.astimezone(tz_info)
+        if maintenance:
             return flask.render_template(
                 "/credentials/schedule.html",
                 **template_data,
                 maintenance_error=True,
-                maintenance_start=maintenance_start_tz,
-                maintenance_end=maintenance_end_tz,
+                maintenance_start=maintenance_start,
+                maintenance_end=maintenance_end,
             )
 
-        if assessment_reservation_uuid:
-            """check if the rescheduled datetime falls
-            between the contract effectiveness window"""
+        # if the exam is rescheduled
+        if is_rescheduling:
             if not contract_long_id:
                 return flask.redirect("/credentials/your-exams")
-            effective_from = now.astimezone(tz_info) + timedelta(
-                hours=time_delta
-            )
-            effective_to = (
-                datetime.strptime(
-                    f"{contract_detail['contractInfo']['effectiveTo']}",
-                    "%Y-%m-%dT%H:%M:%SZ",
-                )
-                .replace(tzinfo=pytz.UTC)
-                .astimezone(tz_info)
-            )
 
-            if starts_at < effective_from or starts_at > effective_to:
-                error = [
-                    "Scheduled time should be between",
-                    f"{effective_from.strftime('%m-%d-%Y %H:%M')}",
-                    "to",
-                    f"{effective_to.strftime('%m-%d-%Y %H:%M')}",
-                ]
+            exam_effectiveness_error = check_cred_exam_effectiveness(
+                contract_detail,
+                timezone,
+                time_buffer,
+                starts_at,
+            )
+            if exam_effectiveness_error is not None:
                 return flask.render_template(
                     "/credentials/schedule.html",
-                    error=" ".join(error),
+                    error=" ".join(exam_effectiveness_error),
                     **template_data,
                 )
 
-            response = trueability_api.patch_assessment_reservation(
-                starts_at=starts_at.isoformat(),
-                timezone=timezone,
-                country_code=country_code,
-                uuid=assessment_reservation_uuid,
-            )
-            if response and "assessment_reservation" not in response:
-                error = response.get("message", "Could not reschedule exam")
-                return flask.render_template(
-                    "/credentials/schedule.html",
-                    error=error,
-                    time_delay=time_delay,
+            # ensure rescheduling
+            try:
+                # update the assessment reservation
+                response = ua_contracts_api.post_assessment_reservation(
+                    contract_item_id,
+                    first_name,
+                    last_name,
+                    timezone,
+                    starts_at.isoformat(),
+                    country_code,
                 )
-            else:
+
+                if response and "reservation" not in response:
+                    error = response["message"]
+                    return flask.render_template(
+                        "/credentials/schedule.html",
+                        error=error,
+                        time_delay=time_delay,
+                    )
+                if is_staging and is_proctoring_enabled(data["ta_exam"]):
+                    student = proctor_api.get_student(user["email"])
+                    student_sessions = proctor_api.get_student_sessions(
+                        {
+                            "ext_exam_id": assessment_reservation_uuid,
+                            "student_id": student.get("data", {}).get(
+                                "student_id"
+                            ),
+                        }
+                    )
+                    student_session_array = student_sessions.get("data", [{}])
+                    student_session = None
+                    if len(student_session_array) > 0:
+                        student_session = student_session_array[0]
+
+                    uuid = response.get("reservation", {}).get("IDs", [])[-1]
+                    student_session_data = {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "student_email": user["email"],
+                        "exam_date_time": starts_at.isoformat(),
+                        "client_exam_id": proc_exam,
+                        "ext_exam_id": uuid,
+                        "timezone": timezone,
+                        "ai_enabled": "1",
+                        "exam_link": base_url
+                        + "credentials/"
+                        + f"exam?uuid={uuid}"
+                        + f"&ta_exam={data['ta_exam']}",
+                    }
+                    # update the student session if present
+                    if student_session:
+                        student_session_id = student_session.get(
+                            "session_link", ""
+                        )
+                        proctor_api.update_student_session(
+                            student_session_id,
+                            student_session_data,
+                        )
+                    # create a new student session
+                    else:
+                        proctor_api.create_student_session(
+                            student_session_data
+                        )
+
                 exam = {
-                    "name": "CUE.01 Linux",
+                    "name": ta_exam_name,
                     "date": starts_at.strftime("%d %b %Y"),
                     "time": starts_at.strftime("%I:%M %p ") + timezone,
                     "uuid": assessment_reservation_uuid,
@@ -494,17 +643,8 @@ def cred_schedule(
                 return flask.render_template(
                     "/credentials/schedule-confirm.html",
                     exam=exam,
+                    ta_exam=data["ta_exam"],
                     contract_long_id=contract_long_id,
-                )
-        else:
-            try:
-                response = ua_contracts_api.post_assessment_reservation(
-                    contract_item_id,
-                    first_name,
-                    last_name,
-                    timezone,
-                    starts_at.isoformat(),
-                    country_code,
                 )
             except Exception as error:
                 flask.current_app.extensions["sentry"].captureException(
@@ -517,23 +657,57 @@ def cred_schedule(
                     }
                 )
                 error = error.response.json()["message"]
+                is_banned = False
+                if cue_banned_error in error:
+                    error = formatted_cue_banned_error
+                    is_banned = True
                 return flask.render_template(
                     "/credentials/schedule.html",
                     error=error,
                     time_delay=time_delay,
+                    is_banned=is_banned,
                 )
 
-            if response and "reservation" not in response:
-                error = response["message"]
-                return flask.render_template(
-                    "/credentials/schedule.html",
-                    error=error,
-                    time_delay=time_delay,
+        # if the exam is scheduled for the first time
+        else:
+            # ensure scheduling
+            try:
+                response = ua_contracts_api.post_assessment_reservation(
+                    contract_item_id,
+                    first_name,
+                    last_name,
+                    timezone,
+                    starts_at.isoformat(),
+                    country_code,
                 )
-            else:
-                uuid = response.get("reservation", {}).get("IDs", [])[-1]
+                if response and "reservation" not in response:
+                    error = response["message"]
+                    return flask.render_template(
+                        "/credentials/schedule.html",
+                        error=error,
+                        time_delay=time_delay,
+                    )
+                uuid = ""
+                if is_staging and is_proctoring_enabled(data["ta_exam"]):
+                    uuid = response.get("reservation", {}).get("IDs", [])[-1]
+                    student_session_data = {
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "student_email": user["email"],
+                        "exam_date_time": starts_at.isoformat(),
+                        "client_exam_id": proc_exam,
+                        "ext_exam_id": uuid,
+                        "timezone": timezone,
+                        "ai_enabled": "1",
+                        "exam_link": base_url
+                        + "credentials/"
+                        + f"exam?uuid={uuid}"
+                        + f"&ta_exam={data['ta_exam']}",
+                    }
+                    proctor_api.create_student_session(student_session_data)
+
                 exam = {
-                    "name": "CUE.01 Linux",
+                    "name": ta_exam_name,
                     "date": starts_at.strftime("%d %b %Y"),
                     "time": starts_at.strftime("%I:%M %p ") + timezone,
                     "uuid": uuid,
@@ -542,7 +716,29 @@ def cred_schedule(
                 return flask.render_template(
                     "/credentials/schedule-confirm.html",
                     exam=exam,
+                    ta_exam=data["ta_exam"],
                     contract_long_id=contract_long_id,
+                )
+            except Exception as error:
+                flask.current_app.extensions["sentry"].captureException(
+                    extra={
+                        "user_info": user_info(flask.session),
+                        "request_url": error.request.url,
+                        "request_headers": error.request.headers,
+                        "response_headers": error.response.headers,
+                        "response_body": error.response.json(),
+                    }
+                )
+                error = error.response.json()["message"]
+                is_banned = False
+                if cue_banned_error in error:
+                    error = formatted_cue_banned_error
+                    is_banned = True
+                return flask.render_template(
+                    "/credentials/schedule.html",
+                    error=error,
+                    time_delay=time_delay,
+                    is_banned=is_banned,
                 )
 
     contract_item_id = flask.request.args.get("contractItemID")
@@ -567,6 +763,10 @@ def cred_schedule(
         date = starts_at.strftime("%Y-%m-%d")
         time = starts_at.strftime("%H:%M")
 
+    ta_exam = flask.request.args.get("ta_exam", "")
+    if get_taexam_to_procexam_mapping(ta_exam) is None:
+        ta_exam = "cue-01-linux"
+    ta_exam_name = EXAM_NAMES[ta_exam]
     return flask.render_template(
         "credentials/schedule.html",
         uuid=assessment_reservation_uuid,
@@ -582,6 +782,8 @@ def cred_schedule(
         cred_is_in_maintenance=cred_is_in_maintenance,
         cred_maintenance_start=cred_maintenance_start,
         cred_maintenance_end=cred_maintenance_end,
+        ta_exam=ta_exam,
+        ta_exam_name=ta_exam_name,
     )
 
 
@@ -589,6 +791,8 @@ def cred_schedule(
 def cred_your_exams(
     ua_contracts_api,
     trueability_api,
+    proctor_api,
+    advantage_mapper,
     show_cred_maintenance_alert,
     cred_is_in_maintenance,
     cred_maintenance_start,
@@ -599,6 +803,9 @@ def cred_your_exams(
     user = user_info(flask.session)
     if not email:
         email = user["email"]
+    is_staging = "staging" in os.getenv(
+        "CONTRACTS_API_URL", "https://contracts.staging.canonical.com/"
+    )
 
     agreement_notification = False
     confidentiality_agreement_enabled = strtobool(
@@ -631,6 +838,57 @@ def cred_your_exams(
         else:
             exam_contracts = []
 
+    is_banned = True
+    account = None
+    try:
+        account = advantage_mapper.get_purchase_account("canonical-ua")
+    except UAContractsUserHasNoAccount:
+        flask.render_template(
+            "credentials/your-exams.html",
+            agreement_notification=agreement_notification,
+            exams=[],
+            show_cred_maintenance_alert=show_cred_maintenance_alert,
+            cred_is_in_maintenance=cred_is_in_maintenance,
+            cred_maintenance_start=cred_maintenance_start,
+            cred_maintenance_end=cred_maintenance_end,
+        )
+    cue_products = get_cue_products(type="exam").get_json()
+    productListingID = None
+    if cue_products and len(cue_products) > 0:
+        productListingID = cue_products[0]["longId"]
+    else:
+        flask.abort(404)
+
+    purchase_request = {
+        "accountID": account.id,
+        "purchaseItems": [
+            {
+                "productListingID": productListingID,
+                "metric": "active-machines",
+                "value": 1,
+            }
+        ],
+        "previousPurchaseID": "",
+        "coupon": None,
+    }
+
+    banned_error = (
+        "invalid purchase: user has been banned "
+        + "from purchasing products in the canonical-cube marketplace"
+    )
+    try:
+        response = advantage_mapper.purchase_from_marketplace(
+            marketplace="canonical-cube",
+            purchase_request=purchase_request,
+            preview=True,
+        )
+        is_banned = False
+    except Exception as e:
+        if hasattr(e, "response") and e.response is not None:
+            error = e.response.json().get("message", "Unknown error")
+            if error != banned_error:
+                is_banned = False
+
     exams_in_progress = []
     exams_scheduled = []
     exams_not_taken = []
@@ -658,8 +916,8 @@ def cred_your_exams(
             reservations = {}
 
         for exam_contract in exam_contracts:
-            name = exam_contract["cueContext"]["courseID"]
-            name = EXAM_NAMES.get(name, name)
+            exam_id = exam_contract["cueContext"]["courseID"]
+            name = EXAM_NAMES.get(exam_id, exam_id)
             contract_item_id = (
                 exam_contract.get("id") or exam_contract["contractItem"]["id"]
             )
@@ -727,22 +985,42 @@ def cred_your_exams(
                     if (
                         state == RESERVATION_STATES["in_progress"]
                         or provisioned_but_not_taken
-                    ):
-                        actions.extend(
-                            [
+                    ) and not is_banned:
+                        proctor_link = None
+                        if is_staging:
+                            student_session = proctor_api.get_student_sessions(
                                 {
-                                    "text": (
-                                        "Continue exam"
-                                        if state
-                                        == RESERVATION_STATES["in_progress"]
-                                        else "Take exam"
-                                    ),
-                                    "href": "/credentials/exam?"
-                                    f"id={assessment_id}",
-                                    "button_class": "p-button--positive",
+                                    "ext_exam_id": r["uuid"],
                                 }
-                            ]
-                        )
+                            )
+                            if student_session is not None:
+                                student_session_array = student_session.get(
+                                    "data", [{}]
+                                )
+                                student_session = None
+                                if len(student_session_array) > 0:
+                                    student_session = student_session_array[0]
+                                    proctor_link = student_session.get(
+                                        "display_session_link", None
+                                    )
+                        action = {
+                            "text": (
+                                "Continue exam"
+                                if state == RESERVATION_STATES["in_progress"]
+                                else "Take exam"
+                            ),
+                            "button_class": "p-button--positive",
+                            "href": "",
+                        }
+                        if proctor_link:
+                            action["href"] = proctor_link
+                        else:
+                            action["href"] = (
+                                f"/credentials/exam?id={assessment_id}"
+                                f"&ta_exam={exam_id}"
+                            )
+
+                        actions.append(action)
 
                     exam_data = {
                         "name": name,
@@ -769,7 +1047,10 @@ def cred_your_exams(
 
                 # if at least 30 minutes away allow reschedule
                 elif state == "Scheduled":
-                    if now + timedelta(minutes=30) < starts_at:
+                    if (
+                        now + timedelta(minutes=30) < starts_at
+                        and not is_banned
+                    ):
                         actions.extend(
                             [
                                 {
@@ -777,7 +1058,8 @@ def cred_your_exams(
                                     "href": "/credentials/schedule?"
                                     f"contractItemID={contract_item_id}"
                                     f"&uuid={r['uuid']}"
-                                    f"&contractLongID={contract_long_id}",
+                                    f"&contractLongID={contract_long_id}"
+                                    f"&ta_exam={exam_id}",
                                     "button_class": "p-button",
                                 },
                             ]
@@ -807,15 +1089,17 @@ def cred_your_exams(
 
             # if exam is not used and is not expired
             else:
-                actions = [
-                    {
-                        "text": "Schedule",
-                        "href": "/credentials/schedule?"
-                        f"contractItemID={contract_item_id}"
-                        f"&contractLongID={contract_long_id}",
-                        "button_class": "p-button",
-                    },
-                ]
+                actions = []
+                if not is_banned:
+                    actions = [
+                        {
+                            "text": "Schedule",
+                            "href": "/credentials/schedule?"
+                            f"contractItemID={contract_item_id}"
+                            f"&contractLongID={contract_long_id}",
+                            "button_class": "p-button",
+                        },
+                    ]
                 exams_not_taken.append(
                     {"name": name, "state": "Not taken", "actions": actions}
                 )
@@ -838,6 +1122,7 @@ def cred_your_exams(
             cred_is_in_maintenance=cred_is_in_maintenance,
             cred_maintenance_start=cred_maintenance_start,
             cred_maintenance_end=cred_maintenance_end,
+            is_banned=is_banned,
         )
     )
 
@@ -898,12 +1183,22 @@ def cred_assessments(trueability_api, **_):
 
 
 @shop_decorator(area="cred", permission="user", response="html")
-def cred_exam(trueability_api, **_):
+def cred_exam(trueability_api, proctor_api, **_):
     email = flask.session["openid"]["email"].lower()
-
+    user = user_info(flask.session)
+    first_name, last_name = get_user_first_last_name()
     confidentiality_agreement_enabled = strtobool(
         os.getenv("CREDENTIALS_CONFIDENTIALITY_ENABLED", "false")
     )
+    is_staging = "staging" in os.getenv(
+        "CONTRACTS_API_URL", "https://contracts.staging.canonical.com/"
+    )
+    ta_exam = flask.request.args.get("ta_exam", "")
+    if ta_exam == "":
+        return flask.abort(404)
+    proc_exam = get_taexam_to_procexam_mapping(ta_exam)
+    if proc_exam is None:
+        return flask.abort(404)
 
     if (
         confidentiality_agreement_enabled
@@ -912,12 +1207,95 @@ def cred_exam(trueability_api, **_):
         return flask.render_template("credentials/exam-no-agreement.html"), 403
 
     assessment_id = flask.request.args.get("id")
-    assessment = trueability_api.get_assessment(assessment_id)
+    reservation_id = flask.request.args.get("uuid")
+    base_url = flask.request.url_root
+    if reservation_id:
+        reservation = trueability_api.get_assessment_reservation(
+            reservation_id
+        )
+        try:
+            assessment_id = (
+                reservation.get("assessment_reservation", {})
+                .get("assessment", {})
+                .get("id")
+            )
+        except Exception:
+            flask.current_app.extensions["sentry"].captureException(
+                extra={
+                    "user_info": user_info(flask.session),
+                    "request_url": flask.request.url,
+                    "request_headers": flask.request.headers,
+                }
+            )
+            return flask.abort(500)
 
+    assessment = trueability_api.get_assessment(assessment_id)
     if assessment.get("error"):
         return flask.abort(404)
 
-    assessment_user = assessment["assessment"]["user"]["email"]
+    assessment = assessment["assessment"]
+    assessment_reservation = assessment.get("assessment_reservation", None)
+
+    if is_staging:
+        student_session = None
+        ext_exam_id = None
+        exam_date_time = None
+        if not assessment_reservation:
+            return flask.abort(403)
+        else:
+            student_session = proctor_api.get_student_sessions(
+                {"ext_exam_id": assessment_reservation["uuid"]}
+            )
+            ext_exam_id = assessment_reservation["uuid"]
+            exam_date_time = (
+                datetime.strptime(
+                    assessment_reservation["starts_at"],
+                    "%Y-%m-%dT%H:%M:%S.%fZ",
+                )
+                .replace(tzinfo=pytz.UTC)
+                .isoformat()
+            )
+
+        student_session_array = student_session.get("data", [{}])
+        should_redirect = False
+
+        # if session exists
+        if len(student_session_array) > 0:
+            student_session = student_session_array[0]
+        # create a new session if it does not exist
+        else:
+            exam_link = (
+                base_url
+                + "credentials/exam?uuid="
+                + f"{assessment_reservation.get('uuid', '')}"
+            )
+            student_session_response = proctor_api.create_student_session(
+                {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "student_email": user["email"],
+                    "exam_date_time": exam_date_time,
+                    "client_exam_id": proc_exam,
+                    "ext_exam_id": ext_exam_id,
+                    "exam_link": exam_link,
+                }
+            )
+            student_session = student_session_response.get("data", None)
+            should_redirect = True
+
+        if student_session is None or student_session.get("id", None) is None:
+            return flask.abort(403)
+
+        if (
+            should_redirect
+            or student_session.get("status", "not started") == "not started"
+        ):
+            if student_session.get("display_session_link"):
+                return flask.redirect(student_session["display_session_link"])
+            if exam_link:
+                return flask.redirect(exam_link)
+
+    assessment_user = assessment["user"]["email"]
     sso_user = user_info(flask.session)["email"]
 
     if assessment_user != sso_user:
@@ -1056,6 +1434,18 @@ def cred_submit_form(**_):
 
 @shop_decorator(area="cube", permission="user", response="html")
 def cred_shop(ua_contracts_api, advantage_mapper, **kwargs):
+    is_staging = "staging" in os.getenv(
+        "CONTRACTS_API_URL", "https://contracts.staging.canonical.com/"
+    )
+    exam_index = 0
+    try:
+        exam_index = int(flask.request.args.get("exam_index", 0))
+    except Exception:
+        exam_index = 0
+
+    if exam_index < 0 or exam_index > 1:
+        exam_index = 0
+
     ua_contracts_api.ensure_purchase_account("canonical-cube")
     account = advantage_mapper.get_purchase_account("canonical-cube")
     if (account.hasChannelStoreAccess) is True:
@@ -1065,6 +1455,9 @@ def cred_shop(ua_contracts_api, advantage_mapper, **kwargs):
 
     exams_file = open("webapp/shop/cred/exams.json", "r")
     exams = json.load(exams_file)
+    if not is_staging:
+        old_metadata = exams[1]["metadata"]
+        exams[1]["metadata"] = [old_metadata[0]]
     cue_products = get_cue_products(type="exam").json
     for product in cue_products:
         for exam in exams:
@@ -1083,7 +1476,8 @@ def cred_shop(ua_contracts_api, advantage_mapper, **kwargs):
     return flask.render_template(
         "credentials/shop/index.html",
         exams=exams,
-        exam_index=0,
+        exam_index=exam_index,
+        is_staging=is_staging,
     )
 
 
@@ -1242,6 +1636,30 @@ def cred_redeem_code(ua_contracts_api, advantage_mapper, **kwargs):
         )
 
 
+@shop_decorator(area="cred", permission="user", response="json")
+@credentials_admin()
+def cred_user_ban(ua_contracts_api, **kwargs):
+    method = flask.request.method
+
+    if method == "PUT":
+        data = flask.request.json
+        sanitized_data = {
+            "email": data.get("email", ""),
+            "reason": data.get("reason", ""),
+            "blocked": data.get("blocked", True),
+            "expiresAt": data.get("expiresAt", None),
+        }
+        resp = ua_contracts_api.put_cue_user_ban(sanitized_data)
+        if resp.get("errors", False):
+            return flask.jsonify(resp), 400
+        return flask.jsonify(resp)
+    elif method == "GET":
+        resp = ua_contracts_api.get_cue_user_bans()
+        return flask.jsonify(resp)
+    else:
+        return flask.jsonify({"error": "Method not allowed"}), 405
+
+
 @shop_decorator(area="cube", permission="user", response="json")
 def get_activation_keys(ua_contracts_api, advantage_mapper, **kwargs):
     account = advantage_mapper.get_purchase_account("canonical-ua")
@@ -1350,7 +1768,6 @@ def get_test_taker_stats(trueability_api, **kwargs):
         return addresses
 
     def fetch_assessments(page: int):
-        print(page)
         result = trueability_api.get_assessments(page=page)
         return get_addresses(result["assessments"])
 
@@ -1420,28 +1837,6 @@ def cancel_scheduled_exam(trueability_api, **kwargs):
             }
         )
         return flask.jsonify({"status": "error"}), 500
-
-
-@shop_decorator(area="cred", permission="user", response="json")
-@credentials_admin()
-def cred_user_ban(ua_contracts_api, **kwargs):
-    method = flask.request.method
-
-    if method == "PUT":
-        data = flask.request.json
-        sanitized_data = {
-            "email": data.get("email", ""),
-            "reason": data.get("reason", ""),
-            "blocked": data.get("blocked", True),
-            "expiresAt": data.get("expiresAt", None),
-        }
-        resp = ua_contracts_api.put_cue_user_ban(sanitized_data)
-        if resp.get("errors", False):
-            return flask.jsonify(resp), 400
-        return flask.jsonify(resp)
-    elif method == "GET":
-        resp = ua_contracts_api.get_cue_user_bans()
-        return flask.jsonify(resp)
 
 
 @shop_decorator(area="cred", permission="user", response="html")
@@ -1586,13 +1981,23 @@ def cred_dashboard_exam_results(trueability_api, **_):
 
 @shop_decorator(area="cred", permission="user", response="json")
 @credentials_group()
-def cred_dashboard_system_statuses(trueability_api, ua_contracts_api, **_):
+def cred_dashboard_system_statuses(
+    trueability_api, proctor_api, ua_contracts_api, **_
+):
     ta_status = trueability_api.get_system_status()
+    try:
+        proctor_status = proctor_api.get_system_status()
+    except Exception:
+        proctor_status = {"error": True}
     contracts_status = {}
     try:
         ua_contracts_api.get_product_listings("canonical-cube")
         contracts_status = {"error": False}
     except Exception:
         contracts_status = {"error": True}
-    statuses = {"ta_status": ta_status, "contracts_status": contracts_status}
+    statuses = {
+        "ta_status": ta_status,
+        "contracts_status": contracts_status,
+        "proctor_status": proctor_status,
+    }
     return flask.jsonify(statuses)
